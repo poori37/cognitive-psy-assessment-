@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -27,6 +26,680 @@
 </head>
   <body class="bg-slate-900 text-white">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module">
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { GoogleGenAI, Type } from "@google/genai";
+import { PenSquare, CheckCircle, RefreshCw, Award, BarChart2, CheckCircle2, XCircle, ArrowRightCircle } from 'lucide-react';
+
+// --- From types.ts ---
+const CardType = {
+  NOUN: 'noun',
+  VERB: 'verb',
+  ADJECTIVE: 'adjective',
+  ADVERB: 'adverb',
+  PRONOUN: 'pronoun',
+  PREPOSITION: 'preposition',
+  CONJUNCTION: 'conjunction',
+  DETERMINER: 'determiner',
+  PUNCTUATION: 'punctuation',
+};
+
+// --- From constants.ts ---
+const LEVELS = [
+  {
+    id: 1,
+    name: "Level 1: The Basics",
+    challenges: [
+      { id: 101, prompt: "Create a simple sentence about a cat." },
+      { id: 102, prompt: "Form a sentence where 'the dog' is the subject." },
+    ],
+  },
+  {
+    id: 2,
+    name: "Level 2: Adding Detail",
+    challenges: [
+      { id: 201, prompt: "Use an adjective to describe the fox." },
+      { id: 202, prompt: "Create a sentence with a prepositional phrase (e.g., 'on the mat')." },
+      { id: 203, prompt: "Write a question about a cookie." },
+    ],
+  },
+  {
+    id: 3,
+    name: "Level 3: Complex Connections",
+    challenges: [
+      { id: 301, prompt: "Create a complex sentence using the conjunction 'and'." },
+      { id: 302, prompt: "Form a sentence using 'but' to show contrast." },
+    ]
+  }
+];
+
+const CARD_DECKS = {
+  // Level 1
+  101: [
+    { id: 'c1-1', text: 'The', type: CardType.DETERMINER },
+    { id: 'c1-2', text: 'cat', type: CardType.NOUN },
+    { id: 'c1-3', text: 'slept', type: CardType.VERB },
+    { id: 'c1-4', text: 'soundly', type: CardType.ADVERB },
+    { id: 'c1-5', text: '.', type: CardType.PUNCTUATION },
+    { id: 'c1-6', text: 'A', type: CardType.DETERMINER },
+    { id: 'c1-7', text: 'barks', type: CardType.VERB },
+  ],
+  102: [
+    { id: 'c1-8', text: 'The', type: CardType.DETERMINER },
+    { id: 'c1-9', text: 'dog', type: CardType.NOUN },
+    { id: 'c1-10', text: 'chased', type: CardType.VERB },
+    { id: 'c1-11', text: 'the', type: CardType.DETERMINER },
+    { id: 'c1-12', text: 'ball', type: CardType.NOUN },
+    { id: 'c1-13', text: '.', type: CardType.PUNCTUATION },
+    { id: 'c1-14', text: 'meowed', type: CardType.VERB },
+  ],
+  // Level 2
+  201: [
+    { id: 'c4-1', text: 'The', type: CardType.DETERMINER },
+    { id: 'c4-2', text: 'quick', type: CardType.ADJECTIVE },
+    { id: 'c4-3', text: 'brown', type: CardType.ADJECTIVE },
+    { id: 'c4-4', text: 'fox', type: CardType.NOUN },
+    { id: 'c4-5', text: 'jumped', type: CardType.VERB },
+    { id: 'c4-6', text: '.', type: CardType.PUNCTUATION },
+    { id: 'c4-7', text: 'lazy', type: CardType.ADJECTIVE },
+    { id: 'c4-8', text: 'dog', type: CardType.NOUN },
+  ],
+  202: [
+    { id: 'c2-1', text: 'The', type: CardType.DETERMINER },
+    { id: 'c2-2', text: 'book', type: CardType.NOUN },
+    { id: 'c2-3', text: 'is', type: CardType.VERB },
+    { id: 'c2-4', text: 'on', type: CardType.PREPOSITION },
+    { id: 'c2-5', text: 'the', type: CardType.DETERMINER },
+    { id: 'c2-6', text: 'table', type: CardType.NOUN },
+    { id: 'c2-7', text: '.', type: CardType.PUNCTUATION },
+    { id: 'c2-8', text: 'under', type: CardType.PREPOSITION },
+  ],
+  203: [
+    { id: 'c5-1', text: 'Who', type: CardType.PRONOUN },
+    { id: 'c5-2', text: 'ate', type: CardType.VERB },
+    { id: 'c5-3', text: 'the', type: CardType.DETERMINER },
+    { id: 'c5-4', text: 'last', type: CardType.ADJECTIVE },
+    { id: 'c5-5', text: 'cookie', type: CardType.NOUN },
+    { id: 'c5-6', text: '?', type: CardType.PUNCTUATION },
+    { id: 'c5-7', text: 'Why', type: CardType.ADVERB },
+  ],
+  // Level 3
+  301: [
+    { id: 'c3-1', text: 'She', type: CardType.PRONOUN },
+    { id: 'c3-2', text: 'sings', type: CardType.VERB },
+    { id: 'c3-3', text: 'and', type: CardType.CONJUNCTION },
+    { id: 'c3-4', text: 'he', type: CardType.PRONOUN },
+    { id: 'c3-5', text: 'dances', type: CardType.VERB },
+    { id: 'c3-6', text: '.', type: CardType.PUNCTUATION },
+    { id: 'c3-7', text: 'or', type: CardType.CONJUNCTION },
+  ],
+  302: [
+    { id: 'c3-8', text: 'He', type: CardType.PRONOUN },
+    { id: 'c3-9', text: 'ran', type: CardType.VERB },
+    { id: 'c3-10', text: 'fast', type: CardType.ADVERB },
+    { id: 'c3-11', text: 'but', type: CardType.CONJUNCTION },
+    { id: 'c3-12', text: 'missed', type: CardType.VERB },
+    { id: 'c3-13', text: 'the', type: CardType.DETERMINER },
+    { id: 'c3-14', text: 'bus', type: CardType.NOUN },
+    { id: 'c3-15', text: '.', type: CardType.PUNCTUATION },
+  ]
+};
+
+const getCardsForChallenge = (challengeId) => {
+  const deck = CARD_DECKS[challengeId] || [];
+  return [...deck].sort(() => Math.random() - 0.5);
+};
+
+// --- From services/geminiService.ts ---
+const API_KEY = process.env.API_KEY;
+
+if (!API_KEY) {
+  throw new Error("API_KEY environment variable not set");
+}
+
+const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+        isCorrect: {
+            type: Type.BOOLEAN,
+            description: "Is the sentence grammatically correct and does it meet the challenge prompt?",
+        },
+        feedback: {
+            type: Type.STRING,
+            description: "Constructive feedback on the grammar. Explain why it is correct or incorrect. If incorrect, suggest a correction. Keep it concise and encouraging.",
+        },
+        score: {
+            type: Type.INTEGER,
+            description: "A score from 0 to 100 based on grammatical correctness, complexity, and relevance to the challenge prompt.",
+        },
+    },
+    required: ["isCorrect", "feedback", "score"],
+};
+
+const validateSentence = async (sentence, challenge) => {
+    try {
+        const prompt = `
+            Challenge: "${challenge}"
+            Sentence to evaluate: "${sentence}"
+
+            Analyze the sentence based on the challenge.
+            1. Is the sentence grammatically correct?
+            2. Does it fulfill the requirements of the challenge prompt?
+            3. Provide brief, constructive feedback.
+            4. Assign a score from 0 to 100.
+
+            Return the analysis in JSON format.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const jsonString = response.text.trim();
+        const parsedResult = JSON.parse(jsonString);
+        
+        if (typeof parsedResult.isCorrect !== 'boolean' || typeof parsedResult.feedback !== 'string' || typeof parsedResult.score !== 'number') {
+            throw new Error("Invalid JSON structure from API");
+        }
+
+        return parsedResult;
+
+    } catch (error) {
+        console.error("Error calling Gemini API:", error);
+        throw new Error("Failed to validate sentence with AI.");
+    }
+};
+
+// --- From components/LoadingSpinner.tsx ---
+const LoadingSpinner = () => {
+  return (
+    React.createElement('div', { className: "flex flex-col items-center justify-center gap-2" },
+      React.createElement('div', { className: "animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400" }),
+      React.createElement('p', { className: "text-sky-300" }, "Checking with AI...")
+    )
+  );
+};
+
+// --- From components/Header.tsx ---
+const Header = () => {
+  return (
+    React.createElement('header', { className: "text-center" },
+        React.createElement('div', { className: "flex items-center justify-center gap-4" },
+            React.createElement(PenSquare, { size: 48, className: "text-sky-400" }),
+            React.createElement('h1', { 
+                className: "text-4xl sm:text-5xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-emerald-400",
+                style: { textShadow: '0 2px 4px rgba(0, 0, 0, 0.2)' }
+            }, "The Syntax Card Game")
+        ),
+        React.createElement('p', { className: "mt-2 text-lg text-slate-300" },
+            "Build sentences, complete challenges, and master grammar with AI feedback."
+        )
+    )
+  );
+};
+
+// --- From components/ChallengeDisplay.tsx ---
+const ChallengeDisplay = ({ challenge }) => {
+  return (
+    React.createElement('div', { className: "text-center p-4 bg-slate-700/50 rounded-lg border border-slate-600" },
+      React.createElement('h2', { className: "text-sm font-semibold text-sky-400 uppercase tracking-wider" }, "Your Challenge"),
+      React.createElement('p', { className: "mt-1 text-xl text-white" }, challenge.prompt)
+    )
+  );
+};
+
+// --- From components/StatusBar.tsx ---
+const StatusBar = ({ levelName, score }) => {
+    return (
+        React.createElement('div', { className: "w-full max-w-4xl mx-auto mt-6 flex justify-between items-center bg-slate-800/60 p-3 rounded-lg ring-1 ring-white/10" },
+            React.createElement('div', { className: "flex items-center gap-2" },
+                React.createElement(BarChart2, { className: "text-sky-400", size: 20 }),
+                React.createElement('span', { className: "text-sm font-semibold text-slate-300" }, "LEVEL:"),
+                React.createElement('span', { className: "text-md font-bold text-white" }, levelName)
+            ),
+            React.createElement('div', { className: "flex items-center gap-2" },
+                React.createElement(Award, { className: "text-amber-400", size: 20 }),
+                React.createElement('span', { className: "text-sm font-semibold text-slate-300" }, "SCORE:"),
+                React.createElement('span', { className: "text-md font-bold text-white" }, score)
+            )
+        )
+    );
+};
+
+// --- From components/Card.tsx ---
+const getCardColors = (type) => {
+  switch (type) {
+    case CardType.NOUN: return 'bg-sky-600 border-sky-400';
+    case CardType.PRONOUN: return 'bg-sky-700 border-sky-500';
+    case CardType.VERB: return 'bg-emerald-600 border-emerald-400';
+    case CardType.ADJECTIVE: return 'bg-amber-600 border-amber-400';
+    case CardType.ADVERB: return 'bg-purple-600 border-purple-400';
+    case CardType.PREPOSITION: return 'bg-rose-600 border-rose-400';
+    case CardType.CONJUNCTION: return 'bg-pink-600 border-pink-400';
+    case CardType.DETERMINER: return 'bg-teal-600 border-teal-400';
+    case CardType.PUNCTUATION: return 'bg-slate-500 border-slate-300';
+    default: return 'bg-slate-600 border-slate-400';
+  }
+};
+
+const Card = ({ card, source, onDoubleClick }) => {
+    const handleDragStart = (e) => {
+        const dragData = { cardId: card.id, source };
+        e.dataTransfer.setData("application/json", JSON.stringify(dragData));
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+  return (
+    React.createElement('div', {
+      draggable: true,
+      onDragStart: handleDragStart,
+      onDoubleClick: onDoubleClick,
+      title: source === 'sentence' ? 'Double-click to return' : '',
+      className: `px-4 py-2 rounded-lg shadow-md cursor-grab active:cursor-grabbing transform transition-all duration-200 hover:scale-105 hover:shadow-xl ${getCardColors(card.type)} border-b-4`
+    },
+      React.createElement('span', { className: "text-lg font-semibold text-white select-none" }, card.text)
+    )
+  );
+};
+
+// --- From components/SentenceTray.tsx ---
+const SentenceTray = ({ cards, onDropToSentence, onReturnToPool, onReorder }) => {
+  const [dragOver, setDragOver] = useState(false);
+  const trayRef = useRef(null);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+  
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    try {
+        const { cardId, source } = JSON.parse(e.dataTransfer.getData("application/json"));
+        
+        if (source === 'pool') {
+            const dropPosition = getDropPosition(e.clientX);
+            onDropToSentence(cardId, dropPosition);
+        } else if (source === 'sentence') {
+            const targetElement = e.target.closest('[data-card-id]');
+            const targetId = targetElement ? targetElement.getAttribute('data-card-id') : null;
+            if (cardId !== targetId) {
+                onReorder(cardId, targetId);
+            }
+        }
+    } catch (error) {
+        console.error("Failed to parse drag data", error);
+    }
+  };
+
+  const getDropPosition = (clientX) => {
+    if (!trayRef.current) return cards.length;
+    const children = Array.from(trayRef.current.children)
+        .filter(child => child.hasAttribute('data-card-id'));
+    
+    let dropIndex = children.length;
+
+    for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        const rect = child.getBoundingClientRect();
+        const midPoint = rect.left + rect.width / 2;
+        if (clientX < midPoint) {
+            dropIndex = i;
+            break;
+        }
+    }
+    return dropIndex;
+  }
+
+  return (
+    React.createElement('div', null,
+        React.createElement('h3', { className: "text-lg font-semibold mb-2 text-slate-300" }, "Your Sentence"),
+        React.createElement('div', {
+            ref: trayRef,
+            onDragOver: handleDragOver,
+            onDragLeave: handleDragLeave,
+            onDrop: handleDrop,
+            className: `min-h-[80px] bg-slate-900/70 p-4 rounded-lg border-2 border-dashed flex flex-wrap items-center gap-3 transition-all duration-300 ${dragOver ? 'border-sky-400 bg-sky-900/50' : 'border-slate-600'}`
+        },
+        cards.length === 0 ? (
+            React.createElement('p', { className: "text-slate-500 w-full text-center" }, "Drag cards here to build a sentence")
+        ) : (
+            cards.map((card, index) => (
+                React.createElement('div', { key: card.id, 'data-card-id': card.id },
+                    React.createElement(Card, { 
+                        card: card, 
+                        source: "sentence", 
+                        onDoubleClick: () => onReturnToPool(card.id)
+                    })
+                )
+            ))
+        ))
+    )
+  );
+};
+
+// --- From components/CardPool.tsx ---
+const CardPool = ({ cards, onDropToPool }) => {
+    const [dragOver, setDragOver] = useState(false);
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setDragOver(true);
+    };
+    
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        try {
+            const { cardId, source } = JSON.parse(e.dataTransfer.getData("application/json"));
+            if (source === 'sentence') {
+                onDropToPool(cardId);
+            }
+        } catch (error) {
+            console.error("Failed to parse drag data", error);
+        }
+    };
+
+    const handleDragLeave = () => {
+        setDragOver(false);
+    }
+
+  return (
+    React.createElement('div', null,
+        React.createElement('h3', { className: "text-lg font-semibold mb-2 text-slate-300" }, "Available Cards"),
+        React.createElement('div', {
+            onDragOver: handleDragOver,
+            onDrop: handleDrop,
+            onDragLeave: handleDragLeave,
+            className: `min-h-[80px] bg-slate-700/50 p-4 rounded-lg border flex flex-wrap items-center gap-3 transition-colors duration-300 ${dragOver ? 'border-sky-400' : 'border-slate-600'}`
+        },
+        cards.map(card => (
+            React.createElement(Card, { key: card.id, card: card, source: "pool" })
+        )))
+    )
+  );
+};
+
+// --- From components/FeedbackDisplay.tsx ---
+const ScoreCircle = ({ score }) => {
+  const circumference = 2 * Math.PI * 30; // 2 * pi * r
+  const offset = circumference - (score / 100) * circumference;
+
+  let strokeColor = 'stroke-green-400';
+  if (score < 50) strokeColor = 'stroke-red-400';
+  else if (score < 80) strokeColor = 'stroke-yellow-400';
+
+  return (
+    React.createElement('div', { className: "relative w-20 h-20" },
+      React.createElement('svg', { className: "w-full h-full", viewBox: "0 0 70 70" },
+        React.createElement('circle', {
+          className: "text-slate-700",
+          strokeWidth: "5",
+          stroke: "currentColor",
+          fill: "transparent",
+          r: "30",
+          cx: "35",
+          cy: "35"
+        }),
+        React.createElement('circle', {
+          className: `transform -rotate-90 origin-center ${strokeColor} transition-all duration-1000`,
+          strokeWidth: "5",
+          strokeDasharray: circumference,
+          strokeDashoffset: offset,
+          stroke: "currentColor",
+          fill: "transparent",
+          r: "30",
+          cx: "35",
+          cy: "35"
+        })
+      ),
+      React.createElement('span', { className: "absolute inset-0 flex items-center justify-center text-xl font-bold" }, score)
+    )
+  );
+};
+
+const FeedbackDisplay = ({ result, onNextChallenge, canAdvance }) => {
+  const { isCorrect, feedback, score } = result;
+  const title = score === 100 ? 'Perfect!' : score >= 80 ? 'Excellent!' : isCorrect ? 'Correct!' : 'Needs Improvement';
+
+  return (
+    React.createElement('div', { className: `p-4 rounded-lg flex flex-col sm:flex-row items-start gap-4 ${isCorrect ? 'bg-green-900/50 border-green-700' : 'bg-red-900/50 border-red-700'} border` },
+      React.createElement('div', { className: "flex-shrink-0 mx-auto sm:mx-0" },
+        React.createElement(ScoreCircle, { score: score })
+      ),
+      React.createElement('div', { className: "flex-grow text-center sm:text-left" },
+        React.createElement('div', { className: "flex items-center justify-center sm:justify-start gap-2" },
+            isCorrect ? 
+                React.createElement(CheckCircle2, { className: "text-green-400", size: 24 }) : 
+                React.createElement(XCircle, { className: "text-red-400", size: 24 }),
+            React.createElement('h3', { className: `text-xl font-bold ${isCorrect ? 'text-green-300' : 'text-red-300'}` }, title)
+        ),
+        React.createElement('p', { className: "mt-1 text-slate-200" }, feedback),
+        
+        canAdvance && score < 100 && (
+            React.createElement('p', { className: "mt-2 text-sm text-sky-200/80 italic" },
+                "You can move on, or try rearranging the words to get a perfect 100!"
+            )
+        ),
+
+        canAdvance && (
+            React.createElement('button', { 
+                onClick: onNextChallenge,
+                className: "mt-4 inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-500 transition-all duration-300 transform hover:scale-105"
+            },
+                "Next Challenge",
+                React.createElement(ArrowRightCircle, { size: 20 })
+            )
+        )
+      )
+    )
+  );
+};
+
+// --- From App.tsx ---
+const App = () => {
+  const [levelIndex, setLevelIndex] = useState(() => Number(localStorage.getItem('levelIndex') || '0'));
+  const [challengeIndex, setChallengeIndex] = useState(() => Number(localStorage.getItem('challengeIndex') || '0'));
+  const [totalScore, setTotalScore] = useState(() => Number(localStorage.getItem('totalScore') || '0'));
+  
+  const [availableCards, setAvailableCards] = useState([]);
+  const [sentenceCards, setSentenceCards] = useState([]);
+  const [validationResult, setValidationResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [challengeBestScore, setChallengeBestScore] = useState(0);
+
+  const currentLevel = LEVELS[levelIndex];
+  const currentChallenge = currentLevel?.challenges[challengeIndex];
+
+  const loadChallenge = useCallback((levelIdx, challengeIdx) => {
+    const level = LEVELS[levelIdx];
+    const challenge = level?.challenges[challengeIdx];
+    if (challenge) {
+      setAvailableCards(getCardsForChallenge(challenge.id));
+      setSentenceCards([]);
+      setValidationResult(null);
+      setError(null);
+      setChallengeBestScore(0);
+      localStorage.setItem('levelIndex', String(levelIdx));
+      localStorage.setItem('challengeIndex', String(challengeIdx));
+    } else {
+      console.log("Game completed!");
+    }
+  }, []);
+  
+  useEffect(() => {
+    loadChallenge(levelIndex, challengeIndex);
+  }, [levelIndex, challengeIndex, loadChallenge]);
+
+  useEffect(() => {
+    localStorage.setItem('totalScore', String(totalScore));
+  }, [totalScore]);
+
+  const handleDropToSentence = (cardId, position) => {
+    const cardToMove = availableCards.find(c => c.id === cardId);
+    if (cardToMove) {
+      setAvailableCards(prev => prev.filter(c => c.id !== cardId));
+      setSentenceCards(prev => {
+        const newSentence = [...prev];
+        if (position !== undefined) {
+            newSentence.splice(position, 0, cardToMove);
+        } else {
+            newSentence.push(cardToMove);
+        }
+        return newSentence;
+      });
+    }
+  };
+
+  const handleReturnToPool = (cardId) => {
+    const cardToMove = sentenceCards.find(c => c.id === cardId);
+    if (cardToMove) {
+      setSentenceCards(prev => prev.filter(c => c.id !== cardId));
+      setAvailableCards(prev => [...prev, cardToMove]);
+    }
+  };
+  
+  const handleReorderSentence = (draggedId, targetId) => {
+    setSentenceCards(prev => {
+        const draggedIndex = prev.findIndex(c => c.id === draggedId);
+        if (draggedIndex === -1) return prev;
+
+        const newCards = [...prev];
+        const [draggedItem] = newCards.splice(draggedIndex, 1);
+
+        if (targetId === null) {
+            newCards.push(draggedItem);
+        } else {
+            const targetIndex = newCards.findIndex(c => c.id === targetId);
+            if (targetIndex !== -1) {
+                newCards.splice(targetIndex, 0, draggedItem);
+            } else {
+                 newCards.push(draggedItem); // Fallback
+            }
+        }
+        return newCards;
+    });
+  };
+
+  const handleSubmitSentence = async () => {
+    if (sentenceCards.length === 0) {
+      setError("Please build a sentence first.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    
+    const sentence = sentenceCards.map(c => c.text).join(' ').replace(/\s+([.,?!])/g, '$1');
+
+    try {
+      const result = await validateSentence(sentence, currentChallenge?.prompt || '');
+      setValidationResult(result);
+
+      if (result.isCorrect && result.score > challengeBestScore) {
+        const scoreDifference = result.score - challengeBestScore;
+        setTotalScore(prev => prev + scoreDifference);
+        setChallengeBestScore(result.score);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("An error occurred while validating the sentence. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const goToNextChallenge = () => {
+    const isLastChallengeInLevel = challengeIndex === currentLevel.challenges.length - 1;
+    if (isLastChallengeInLevel) {
+      if (levelIndex < LEVELS.length - 1) {
+        setLevelIndex(prev => prev + 1);
+        setChallengeIndex(0);
+      } else {
+        alert("Congratulations! You've completed all levels!");
+      }
+    } else {
+      setChallengeIndex(prev => prev + 1);
+    }
+  };
+
+  if (!currentChallenge) {
+    return React.createElement('div', { className: "flex items-center justify-center min-h-screen bg-slate-900" }, React.createElement(LoadingSpinner));
+  }
+  
+  const canAdvance = challengeBestScore >= 80;
+
+  return (
+    React.createElement('div', { className: "min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900 p-4 sm:p-6 md:p-8 flex flex-col items-center" },
+      React.createElement(Header),
+      React.createElement(StatusBar, { levelName: currentLevel.name, score: totalScore }),
+      React.createElement('main', { className: "w-full max-w-4xl mx-auto bg-slate-800/50 rounded-2xl shadow-2xl p-6 md:p-8 ring-1 ring-white/10 mt-6" },
+        React.createElement(ChallengeDisplay, { challenge: currentChallenge }),
+        React.createElement('div', { className: "mt-8 space-y-6" },
+          React.createElement(SentenceTray, { 
+            cards: sentenceCards, 
+            onDropToSentence: handleDropToSentence,
+            onReturnToPool: handleReturnToPool,
+            onReorder: handleReorderSentence
+          }),
+          React.createElement(CardPool, { cards: availableCards, onDropToPool: handleReturnToPool })
+        ),
+        React.createElement('div', { className: "mt-8 flex flex-col sm:flex-row items-center justify-center gap-4" },
+          React.createElement('button', {
+            onClick: handleSubmitSentence,
+            disabled: isLoading || sentenceCards.length === 0 || challengeBestScore === 100,
+            className: "flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-3 bg-emerald-600 text-white font-bold rounded-lg shadow-lg hover:bg-emerald-500 transition-all duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed transform hover:scale-105"
+          },
+            React.createElement(CheckCircle, { size: 20 }),
+            "Check Sentence"
+          ),
+          React.createElement('button', {
+            onClick: () => loadChallenge(levelIndex, challengeIndex),
+            disabled: isLoading,
+            className: "flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-3 bg-sky-600 text-white font-bold rounded-lg shadow-lg hover:bg-sky-500 transition-all duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed transform hover:scale-105"
+          },
+            React.createElement(RefreshCw, { size: 20 }),
+            "Reset"
+          )
+        ),
+        React.createElement('div', { className: "mt-8 min-h-[100px]" },
+          isLoading && React.createElement('div', { className: "flex justify-center" }, React.createElement(LoadingSpinner)),
+          error && React.createElement('p', { className: "text-center text-red-400 bg-red-900/50 p-3 rounded-lg" }, error),
+          validationResult && React.createElement(FeedbackDisplay, { result: validationResult, onNextChallenge: goToNextChallenge, canAdvance: canAdvance })
+        )
+      ),
+      React.createElement('footer', { className: "text-center text-slate-400 mt-8 text-sm" },
+        React.createElement('p', null, "\u00A9 2024 The Syntax Card Game. Powered by Gemini.")
+      )
+    )
+  );
+};
+
+// --- From index.tsx ---
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  React.createElement(React.StrictMode, null, React.createElement(App))
+);
+
+    </script>
   </body>
 </html>
