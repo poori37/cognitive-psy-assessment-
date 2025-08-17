@@ -152,10 +152,12 @@ const getCardsForChallenge = (challengeId) => {
 };
 
 // --- From services/geminiService.ts ---
-const API_KEY = process.env.API_KEY;
+// IMPORTANT: To run this application, you need to replace the placeholder value below
+// with your own Google Gemini API key. Without a valid key, the AI functionality will not work.
+const API_KEY = "YOUR_API_KEY_HERE";
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+if (API_KEY === "YOUR_API_KEY_HERE") {
+  console.warn("API Key is not set. Please replace 'YOUR_API_KEY_HERE' in index.html with your actual Gemini API key.");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
